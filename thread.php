@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
         } else {
             $name = !empty($_POST['name']) ? $_POST['name'] : '名無しさん';
             $date = date('Y/m/d(D) H:i:s');
-            $post_data = htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . "<>" . "" . "<>" . $date . " ID:" . $user_id . "<>" . htmlspecialchars($comment, ENT_QUOTES, 'UTF-8') . "\n";
+            $post_data = $name . "<>" . "" . "<>" . $date . " ID:" . $user_id . "<>" . $comment . "\n";
             file_put_contents($file_path, $post_data, FILE_APPEND);
             header('Location: thread.php?id=' . urlencode($thread_id));
             exit;
@@ -126,6 +126,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
     <meta charset="UTF-8">
     <title><?php echo htmlspecialchars($thread_title, ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php
+    $pwa_config_file = 'pwa_config.json';
+    $pwa_config = [
+        'name' => '掲示板',
+        'short_name' => '掲示板',
+        'start_url' => '.',
+        'display' => 'standalone',
+        'background_color' => '#ffffff',
+        'theme_color' => '#2196F3',
+        'icon_path' => 'images/icon-512x512.png'
+    ];
+    if (file_exists($pwa_config_file)) {
+        $loaded_pwa_config = json_decode(file_get_contents($pwa_config_file), true);
+        if (is_array($loaded_pwa_config)) {
+            $pwa_config = array_merge($pwa_config, $loaded_pwa_config);
+        }
+    }
+    ?>
+    <meta name="theme-color" content="<?php echo htmlspecialchars($pwa_config['theme_color']); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($pwa_config['icon_path']); ?>">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+    <?php if (!empty($board_config['google_analytics_id'])): ?>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo htmlspecialchars($board_config['google_analytics_id']); ?>"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '<?php echo htmlspecialchars($board_config['google_analytics_id']); ?>');
+    </script>
+    <?php endif; ?>
     <?php if (!empty($board_config['custom_thread_css'])): ?>
     <style>
         <?php echo $board_config['custom_thread_css']; ?>
@@ -150,8 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
     <?php endif; ?>
 
     <div class="post-list">
-        <?php foreach ($posts as $index => $post): ?>
-            <?php
+        <?php foreach ($posts as $index => $post):
             if ($post === '削除されました') {
                 echo '<div class="post"><div class="post-info"><span class="post-number">' . ($index + 1) . ':</span> 削除されました</div></div>';
                 continue;
@@ -159,42 +203,60 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
             $parts = explode('<>', $post, 4);
             if (count($parts) < 4) continue;
             list($name, $mail, $date_id, $comment) = $parts;
-            $comment = preg_replace('/(>>(\d+))/', '<a href="#post$2">$1</a>', $comment);
+
+            // 悪意のあるHTMLを防ぐためにエスケープ
+            $name_escaped = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+            $comment_escaped = htmlspecialchars($comment, ENT_QUOTES, 'UTF-8');
+
+            // アンカーリンクを生成 (エスケープされた >> を探す)
+            $comment_escaped = preg_replace('/(&gt;&gt;(\d+))/', '<a href="#post$2">&gt;&gt;$2</a>', $comment_escaped);
+
+            // 改行を<br>に変換
+            $comment_processed = nl2br($comment_escaped);
             ?>
             <div class="post" id="post<?php echo $index + 1; ?>">
                 <div class="post-info">
                     <span class="post-number"><?php echo $index + 1; ?>:</span>
-                    名前: <span class="post-name"><?php echo htmlspecialchars($name); ?></span>
+                    名前: <span class="post-name"><?php echo $name_escaped; ?></span>
                     [<?php echo htmlspecialchars($date_id); ?>]
                 </div>
                 <div class="post-body">
-                    <?php echo nl2br($comment); ?>
+                    <?php echo $comment_processed; ?>
                 </div>
             </div>
-        <?php endforeach; ?>
-        <?php if (empty($posts)): ?>
+        <?php endforeach;
+        if (empty($posts)): ?>
             <p>まだ投稿がありません。</p>
         <?php endif; ?>
     </div>
 
-    <?php if ($is_dat_ochi): ?>
+    <?php if ($is_dat_ochi):
+    ?>
     <div class="dat-ochi-info">
-        <p>このスレッドは1000を超えました。もう書けないので、新しいスreadを立ててください。</p>
+        <p>このスレッドは1000を超えました。もう書けないので、新しいスレッドを立ててください。</p>
     </div>
-    <?php else: ?>
+    <?php else:
+    ?>
     <div class="form-container">
         <h2>投稿する</h2>
         <form action="thread.php?id=<?php echo urlencode($thread_id); ?>" method="post">
             <input type="text" name="name" size="30" placeholder="名前 (省略時: 名無しさん)">
-            <textarea name="comment" rows="5" cols="70" placeholder="コメントを入力" required></textarea>
+            <textarea name="comment" rows="5" cols="70" placeholder="レスを入力" required></textarea>
             <button type="submit">書き込む</button>
         </form>
     </div>
     <?php endif; ?>
 
+    <?php if (!empty($board_config['footer_ad_code'])): ?>
+    <div class="footer-ad" style="text-align:center; margin-top: 20px;">
+        <?php echo $board_config['footer_ad_code']; ?>
+    </div>
+    <?php endif; ?>
+
+    
+
     <footer>
-        <p>© 2025 <a href="https://github.com/koba_9813">Koba_9813</a> All rights reserved.</p>
-        <p>Powered by 
+            <p>Powered by 
             <?php
             $powered_by_link = '';
             if (!empty($board_config['admin_sns_link'])) {
@@ -209,6 +271,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
                 <?php echo htmlspecialchars($board_config['admin_name']); ?>
             <?php endif; ?>
         </p>
+        <p>© 2025 <a href="https://github.com/koba_9813">Koba_9813</a> All rights reserved.</p>
+        <p>Manaita BBS System Ver1.1.0</p>
     </footer>
 </div>
 

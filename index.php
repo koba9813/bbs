@@ -54,10 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !empty($_POST['title']) && !empty($_
     $filename = time() . '.dat';
     $name = '名無しさん';
     $mail = '';
-    $date = date('Y/m/d(D) H:i:s');
+    $date = date('Y-m-d');
     $remote_addr = $_SERVER['REMOTE_ADDR'];
     $id = substr(base64_encode(hash('sha256', $remote_addr . $date, true)), 0, 8);
-    $date_id = $date . ' ID:' . $id;
+    $date_id = date('Y/m/d(D) H:i:s') . ' ID:' . $id;
     $first_post_line = $name . '<>' . $mail . '<>' . $date_id . '<>' . $first_post_content;
     file_put_contents($data_dir . $filename, $title . "
 " . $first_post_line . "
@@ -95,18 +95,18 @@ foreach ($files as $file) {
         ];
     }
 }
-if ($pinned_thread) {
-    array_unshift($threads, $pinned_thread);
-}
-$search_query = $_GET['q'] ?? '';
-$filtered_threads = [];
 if (!empty($search_query)) {
+    $filtered_threads = [];
     foreach ($threads as $thread) {
         if (mb_stripos($thread['title'], $search_query, 0, 'UTF-8') !== false) {
             $filtered_threads[] = $thread;
         }
     }
     $threads = $filtered_threads;
+}
+
+if ($pinned_thread) {
+    array_unshift($threads, $pinned_thread);
 }
 ?>
 <!DOCTYPE html>
@@ -115,6 +115,51 @@ if (!empty($search_query)) {
     <meta charset="UTF-8">
     <title><?php echo htmlspecialchars($board_config['board_name']); ?></title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php
+    $pwa_config_file = 'pwa_config.json';
+    $pwa_config = [
+        'name' => '掲示板',
+        'short_name' => '掲示板',
+        'start_url' => '.',
+        'display' => 'standalone',
+        'background_color' => '#ffffff',
+        'theme_color' => '#2196F3',
+        'icon_path' => 'images/icon-512x512.png'
+    ];
+    if (file_exists($pwa_config_file)) {
+        $loaded_pwa_config = json_decode(file_get_contents($pwa_config_file), true);
+        if (is_array($loaded_pwa_config)) {
+            $pwa_config = array_merge($pwa_config, $loaded_pwa_config);
+        }
+    }
+    ?>
+    <meta name="theme-color" content="<?php echo htmlspecialchars($pwa_config['theme_color']); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($pwa_config['icon_path']); ?>">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+    <?php if (!empty($board_config['google_analytics_id'])): ?>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo htmlspecialchars($board_config['google_analytics_id']); ?>"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '<?php echo htmlspecialchars($board_config['google_analytics_id']); ?>');
+    </script>
+    <?php endif; ?>
     <?php if (!empty($board_config['custom_index_css'])): ?>
     <style>
         <?php echo $board_config['custom_index_css']; ?>
@@ -167,8 +212,18 @@ if (!empty($search_query)) {
                     <button type="submit">検索</button>
                 </form>
             </div>
+            <?php if (!empty($board_config['sidebar_ad_code'])): ?>
+            <div class="sidebar-ad" style="margin-top: 15px; text-align: center;">
+                <?php echo $board_config['sidebar_ad_code']; ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
+    <?php if (!empty($board_config['footer_ad_code'])): ?>
+    <div class="footer-ad" style="text-align:center; margin-top: 20px;">
+        <?php echo $board_config['footer_ad_code']; ?>
+    </div>
+    <?php endif; ?>
     <footer>
         <p>Powered by 
             <?php
@@ -181,6 +236,7 @@ if (!empty($search_query)) {
             <?php endif; ?>
         </p>
         <p>© 2025 <a href="https://github.com/koba_9813">Koba_9813</a> All rights reserved.</p>
+        <p>Manaita BBS System Ver1.1.0</p>
     </footer>
 </div>
 </body>

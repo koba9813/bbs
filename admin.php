@@ -10,6 +10,95 @@ if (!file_exists('admin_config.php')) {
     file_put_contents('admin_config.php', "<?php define('ADMIN_PASSWORD_HASH', '" . $default_admin_hash . "'); ?>");
 }
 require_once 'admin_config.php';
+
+$pwa_config_file = 'pwa_config.json';
+$pwa_config = [
+    'name' => '掲示板',
+    'short_name' => '掲示板',
+    'start_url' => '.',
+    'display' => 'standalone',
+    'background_color' => '#ffffff',
+    'theme_color' => '#2196F3',
+    'icon_path' => 'images/icon-512x512.png'
+];
+
+if (file_exists($pwa_config_file)) {
+    $loaded_pwa_config = json_decode(file_get_contents($pwa_config_file), true);
+    if (is_array($loaded_pwa_config)) {
+        $pwa_config = array_merge($pwa_config, $loaded_pwa_config);
+    }
+}
+generate_pwa_files($pwa_config);
+
+function generate_pwa_files($pwa_config) {
+    // Generate manifest.json
+    $manifest_content = [
+        'name' => $pwa_config['name'],
+        'short_name' => $pwa_config['short_name'],
+        'start_url' => $pwa_config['start_url'],
+        'display' => $pwa_config['display'],
+        'background_color' => $pwa_config['background_color'],
+        'theme_color' => $pwa_config['theme_color'],
+        'icons' => [
+            [
+                'src' => $pwa_config['icon_path'],
+                'sizes' => '512x512',
+                'type' => 'image/png'
+            ]
+        ]
+    ];
+    file_put_contents('manifest.json', json_encode($manifest_content, JSON_PRETTY_PRINT));
+
+    // Generate sw.js
+    $sw_content = <<<EOT
+const CACHE_NAME = 'bbs-cache-v1';
+const urlsToCache = [
+    '/',
+    '/index.php',
+    '/style.css',
+    '/thread.php',
+    '{$pwa_config['icon_path']}'
+];
+
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => {
+                console.log('Opened cache');
+                return cache.addAll(urlsToCache);
+            })
+    );
+});
+
+self.addEventListener('fetch', event => {
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => {
+                if (response) {
+                    return response;
+                }
+                return fetch(event.request);
+            })
+    );
+});
+
+self.addEventListener('activate', event => {
+    const cacheWhitelist = [CACHE_NAME];
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    if (cacheWhitelist.indexOf(cacheName) === -1) {
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        })
+    );
+});
+EOT;
+    file_put_contents('sw.js', $sw_content);
+}
 $ng_words_file = 'ng_words.txt';
 $banned_users_file = 'banned_users.json';
 $config_file = 'config.json';
@@ -92,6 +181,36 @@ if (isset($_POST['update_pinned_thread'])) {
     $board_config['pinned_thread_id'] = htmlspecialchars($_POST['pinned_thread_id']);
     file_put_contents($config_file, json_encode($board_config, JSON_PRETTY_PRINT));
     header('Location: admin.php?status=pinned_thread_updated');
+    exit;
+}
+
+if (isset($_POST['update_pwa_settings'])) {
+    $pwa_config['name'] = htmlspecialchars($_POST['pwa_name']);
+    $pwa_config['short_name'] = htmlspecialchars($_POST['pwa_short_name']);
+    $pwa_config['start_url'] = htmlspecialchars($_POST['pwa_start_url']);
+    $pwa_config['display'] = htmlspecialchars($_POST['pwa_display']);
+    $pwa_config['background_color'] = htmlspecialchars($_POST['pwa_background_color']);
+    $pwa_config['theme_color'] = htmlspecialchars($_POST['pwa_theme_color']);
+    $pwa_config['icon_path'] = htmlspecialchars($_POST['pwa_icon_path']);
+
+    file_put_contents($pwa_config_file, json_encode($pwa_config, JSON_PRETTY_PRINT));
+    generate_pwa_files($pwa_config);
+    header('Location: admin.php?status=pwa_settings_updated');
+    exit;
+}
+
+if (isset($_POST['update_ga_settings'])) {
+    $board_config['google_analytics_id'] = htmlspecialchars($_POST['google_analytics_id']);
+    file_put_contents($config_file, json_encode($board_config, JSON_PRETTY_PRINT));
+    header('Location: admin.php?status=ga_settings_updated');
+    exit;
+}
+
+if (isset($_POST['update_ad_settings'])) {
+    $board_config['footer_ad_code'] = $_POST['footer_ad_code'];
+    $board_config['sidebar_ad_code'] = $_POST['sidebar_ad_code'];
+    file_put_contents($config_file, json_encode($board_config, JSON_PRETTY_PRINT));
+    header('Location: admin.php?status=ad_settings_updated');
     exit;
 }
 $banned_users = [];
@@ -270,6 +389,40 @@ foreach ($files as $file) {
             </ul>
         </div>
     </div>
+    
+        <div class="admin-section">
+        <h2>スレッド・レス監視</h2>
+        <?php foreach ($threads as $thread): ?>
+        <div style="margin-bottom: 20px;">
+            <h3>
+                <?php echo htmlspecialchars($thread['title']); ?>
+                <a href="?action=delete_thread&thread=<?php echo urlencode($thread['id']); ?>" onclick="return confirm('本当にこのスレッドを削除しますか？');" class="delete-btn" style="font-size:14px;">スレッドごと削除</a>
+            </h3>
+            <?php foreach ($thread['posts'] as $index => $post): ?>
+                <?php
+                $parts = explode('<>', $post, 4);
+                if (count($parts) < 4) continue;
+                list($name, $mail, $date_id, $comment) = $parts;
+                preg_match('/ID:([a-zA-Z0-9\+\/=]+)/', $date_id, $matches);
+                $user_id = $matches[1] ?? '';
+                ?>
+                <div class="post-body">
+                    <strong><?php echo $index + 1; ?>: <?php echo htmlspecialchars($name); ?></strong> [<?php echo htmlspecialchars($date_id); ?>]
+                    <div style="margin-left: 20px;"><?php echo nl2br(htmlspecialchars($comment)); ?></div>
+                    <div style="text-align:right; font-size:12px;">
+                        <a href="?action=delete_post&thread=<?php echo urlencode($thread['id']); ?>&post_index=<?php echo $index + 1; ?>" class="delete-btn">レス削除</a>
+                        <?php if ($user_id && !isset($banned_users[$user_id])): ?>
+                        <form method="post" style="display:inline;">
+                            <input type="hidden" name="ban_id" value="<?php echo htmlspecialchars($user_id); ?>">
+                            <button type="submit" name="add_ban_id" class="delete-btn">このIDをBAN</button>
+                        </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
     <div class="admin-section">
         <h2>掲示板情報編集</h2>
         <?php if (isset($_GET['status']) && $_GET['status'] === 'board_info_updated'): ?>
@@ -348,38 +501,82 @@ foreach ($files as $file) {
         </form>
     </div>
     <div class="admin-section">
-        <h2>スレッド・レス監視</h2>
-        <?php foreach ($threads as $thread): ?>
-        <div style="margin-bottom: 20px;">
-            <h3>
-                <?php echo htmlspecialchars($thread['title']); ?>
-                <a href="?action=delete_thread&thread=<?php echo urlencode($thread['id']); ?>" onclick="return confirm('本当にこのスレッドを削除しますか？');" class="delete-btn" style="font-size:14px;">スレッドごと削除</a>
-            </h3>
-            <?php foreach ($thread['posts'] as $index => $post): ?>
-                <?php
-                $parts = explode('<>', $post, 4);
-                if (count($parts) < 4) continue;
-                list($name, $mail, $date_id, $comment) = $parts;
-                preg_match('/ID:([a-zA-Z0-9\+\/=]+)/', $date_id, $matches);
-                $user_id = $matches[1] ?? '';
-                ?>
-                <div class="post-body">
-                    <strong><?php echo $index + 1; ?>: <?php echo htmlspecialchars($name); ?></strong> [<?php echo htmlspecialchars($date_id); ?>]
-                    <div style="margin-left: 20px;"><?php echo nl2br(htmlspecialchars($comment)); ?></div>
-                    <div style="text-align:right; font-size:12px;">
-                        <a href="?action=delete_post&thread=<?php echo urlencode($thread['id']); ?>&post_index=<?php echo $index + 1; ?>" class="delete-btn">レス削除</a>
-                        <?php if ($user_id && !isset($banned_users[$user_id])): ?>
-                        <form method="post" style="display:inline;">
-                            <input type="hidden" name="ban_id" value="<?php echo htmlspecialchars($user_id); ?>">
-                            <button type="submit" name="add_ban_id" class="delete-btn">このIDをBAN</button>
-                        </form>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <?php endforeach; ?>
+        <h2>PWA設定</h2>
+        <?php if (isset($_GET['status']) && $_GET['status'] === 'pwa_settings_updated'): ?>
+            <p style="color: green;">PWA設定が更新されました。</p>
+        <?php endif; ?>
+        <form method="post">
+            <p>
+                <label for="pwa_name">アプリ名:</label><br>
+                <input type="text" id="pwa_name" name="pwa_name" value="<?php echo htmlspecialchars($pwa_config['name']); ?>" style="width: 100%; padding: 8px;">
+            </p>
+            <p>
+                <label for="pwa_short_name">短いアプリ名:</label><br>
+                <input type="text" id="pwa_short_name" name="pwa_short_name" value="<?php echo htmlspecialchars($pwa_config['short_name']); ?>" style="width: 100%; padding: 8px;">
+            </p>
+            <p>
+                <label for="pwa_start_url">開始URL:</label><br>
+                <input type="text" id="pwa_start_url" name="pwa_start_url" value="<?php echo htmlspecialchars($pwa_config['start_url']); ?>" style="width: 100%; padding: 8px;">
+            </p>
+            <p>
+                <label for="pwa_display">表示モード:</label><br>
+                <select id="pwa_display" name="pwa_display" style="width: 100%; padding: 8px;">
+                    <option value="standalone" <?php if ($pwa_config['display'] === 'standalone') echo 'selected'; ?>>standalone</option>
+                    <option value="fullscreen" <?php if ($pwa_config['display'] === 'fullscreen') echo 'selected'; ?>>fullscreen</option>
+                    <option value="minimal-ui" <?php if ($pwa_config['display'] === 'minimal-ui') echo 'selected'; ?>>minimal-ui</option>
+                    <option value="browser" <?php if ($pwa_config['display'] === 'browser') echo 'selected'; ?>>browser</option>
+                </select>
+            </p>
+            <p>
+                <label for="pwa_background_color">背景色:</label><br>
+                <input type="color" id="pwa_background_color" name="pwa_background_color" value="<?php echo htmlspecialchars($pwa_config['background_color']); ?>" style="width: 100%; padding: 8px;">
+            </p>
+            <p>
+                <label for="pwa_theme_color">テーマカラー:</label><br>
+                <input type="color" id="pwa_theme_color" name="pwa_theme_color" value="<?php echo htmlspecialchars($pwa_config['theme_color']); ?>" style="width: 100%; padding: 8px;">
+            </p>
+            <p>
+                <label for="pwa_icon_path">アイコンパス (images/からの相対パス):</label><br>
+                <input type="text" id="pwa_icon_path" name="pwa_icon_path" value="<?php echo htmlspecialchars($pwa_config['icon_path']); ?>" style="width: 100%; padding: 8px;">
+                <small>例: images/icon-512x512.png (512x512pxのPNG画像をimagesフォルダに配置してください)</small>
+            </p>
+            <button type="submit" name="update_pwa_settings">PWA設定を更新</button>
+        </form>
     </div>
+    <div class="admin-section">
+        <h2>Googleアナリティクス設定</h2>
+        <?php if (isset($_GET['status']) && $_GET['status'] === 'ga_settings_updated'): ?>
+            <p style="color: green;">Googleアナリティクス設定が更新されました。</p>
+        <?php endif; ?>
+        <form method="post">
+            <p>
+                <label for="google_analytics_id">Googleアナリティクス測定ID (例: G-XXXXXXXXXX または UA-XXXXXXXXX-Y):</label><br>
+                <input type="text" id="google_analytics_id" name="google_analytics_id" value="<?php echo htmlspecialchars($board_config['google_analytics_id'] ?? ''); ?>" style="width: 100%; padding: 8px;">
+                <small>空欄にするとGoogleアナリティクスは無効になります。</small>
+            </p>
+            <button type="submit" name="update_ga_settings">Googleアナリティクス設定を更新</button>
+        </form>
+    </div>
+    <div class="admin-section">
+        <h2>広告設定</h2>
+        <?php if (isset($_GET['status']) && $_GET['status'] === 'ad_settings_updated'): ?>
+            <p style="color: green;">広告設定が更新されました。</p>
+        <?php endif; ?>
+        <form method="post">
+            <p>
+                <label for="footer_ad_code">フッター広告コード:</label><br>
+                <textarea id="footer_ad_code" name="footer_ad_code" rows="8" style="width: 100%; padding: 8px;"><?php echo htmlspecialchars($board_config['footer_ad_code'] ?? ''); ?></textarea>
+                <small>Googleアドセンス、楽天アフィリエイトなどの広告コードを貼り付けてください。</small>
+            </p>
+            <p>
+                <label for="sidebar_ad_code">サイドバー広告コード:</label><br>
+                <textarea id="sidebar_ad_code" name="sidebar_ad_code" rows="8" style="width: 100%; padding: 8px;"><?php echo htmlspecialchars($board_config['sidebar_ad_code'] ?? ''); ?></textarea>
+                <small>Googleアドセンス、楽天アフィリエイトなどの広告コードを貼り付けてください。</small>
+            </p>
+            <button type="submit" name="update_ad_settings">広告設定を更新</button>
+        </form>
+    </div>
+
     <div class="admin-section">
         <h2>カスタムHTML/CSS編集 (スレッド一覧ページ)</h2>
         <form method="post">
