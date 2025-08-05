@@ -1,4 +1,5 @@
 <?php
+session_start();
 // ユーザーIDを生成する関数
 function generate_user_id() {
     $ip = $_SERVER['REMOTE_ADDR'];
@@ -111,6 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
             file_put_contents($banned_users_file, json_encode($banned_users, JSON_PRETTY_PRINT));
         } else {
             $name = !empty($_POST['name']) ? $_POST['name'] : '名無しさん';
+            if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in']) {
+                $name = $board_config['admin_name'];
+            }
             $date = date('Y/m/d(D) H:i:s');
             $post_data = $name . "<>" . "" . "<>" . $date . " ID:" . $user_id . "<>" . $comment . "\n";
             file_put_contents($file_path, $post_data, FILE_APPEND);
@@ -217,7 +221,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
             <div class="post" id="post<?php echo $index + 1; ?>">
                 <div class="post-info">
                     <span class="post-number"><?php echo $index + 1; ?>:</span>
-                    名前: <span class="post-name"><?php echo $name_escaped; ?></span>
+                    名前: <span class="post-name"><?php 
+                        if ($name === $board_config['admin_name']) {
+                            echo '<span style="color: red;">' . $name_escaped . '</span>';
+                        } else {
+                            echo $name_escaped;
+                        }
+                        ?></span>
                     [<?php echo htmlspecialchars($date_id); ?>]
                 </div>
                 <div class="post-body">
@@ -240,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
     <div class="form-container">
         <h2>投稿する</h2>
         <form action="thread.php?id=<?php echo urlencode($thread_id); ?>" method="post">
-            <input type="text" name="name" size="30" placeholder="名前 (省略時: 名無しさん)">
+            <input type="text" name="name" size="30" placeholder="<?php echo isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] ? htmlspecialchars($board_config['admin_name']) : '名前 (省略時: 名無しさん)'; ?>">
             <textarea name="comment" rows="5" cols="70" placeholder="レスを入力" required></textarea>
             <button type="submit">書き込む</button>
         </form>
@@ -272,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$is_dat_ochi && !empty($_POST['comm
             <?php endif; ?>
         </p>
         <p>© 2025 <a href="https://github.com/koba_9813">Koba_9813</a> All rights reserved.</p>
-        <p>Manaita BBS System Ver1.1.0</p>
+        <p>Manaita BBS System Ver 1.1.0</p>
     </footer>
 </div>
 

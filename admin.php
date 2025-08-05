@@ -407,7 +407,13 @@ foreach ($files as $file) {
                 $user_id = $matches[1] ?? '';
                 ?>
                 <div class="post-body">
-                    <strong><?php echo $index + 1; ?>: <?php echo htmlspecialchars($name); ?></strong> [<?php echo htmlspecialchars($date_id); ?>]
+                    <strong><?php echo $index + 1; ?>: <?php
+                        if ($name === $board_config['admin_name']) {
+                            echo '<span style="color: red;">' . htmlspecialchars($name) . '</span>';
+                        } else {
+                            echo htmlspecialchars($name);
+                        }
+                        ?></strong> [<?php echo htmlspecialchars($date_id); ?>]
                     <div style="margin-left: 20px;"><?php echo nl2br(htmlspecialchars($comment)); ?></div>
                     <div style="text-align:right; font-size:12px;">
                         <a href="?action=delete_post&thread=<?php echo urlencode($thread['id']); ?>&post_index=<?php echo $index + 1; ?>" class="delete-btn">レス削除</a>
