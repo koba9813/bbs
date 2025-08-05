@@ -1,4 +1,5 @@
 <?php
+session_start();
 $data_dir = 'data/';
 $config_file = 'config.json';
 if (!file_exists($config_file)) {
@@ -52,7 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !empty($_POST['title']) && !empty($_
     $title = htmlspecialchars($_POST['title'], ENT_QUOTES, 'UTF-8');
     $first_post_content = $_POST['first_post_content'];
     $filename = time() . '.dat';
-    $name = '名無しさん';
+    $name = !empty($_POST['name']) ? htmlspecialchars($_POST['name'], ENT_QUOTES, 'UTF-8') : '名無しさん';
+    if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in']) {
+        $name = $board_config['admin_name'];
+    }
     $mail = '';
     $date = date('Y-m-d');
     $remote_addr = $_SERVER['REMOTE_ADDR'];
@@ -202,6 +206,7 @@ if ($pinned_thread) {
                 <h2>新規スレッド作成</h2>
                 <form action="index.php" method="post">
                     <input type="text" name="title" placeholder="スレッドのタイトル" required>
+                    <input type="text" name="name" placeholder="<?php echo isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] ? htmlspecialchars($board_config['admin_name']) : '名前 (省略時: 名無しさん)'; ?>">
                     <textarea name="first_post_content" rows="5" placeholder="最初の投稿内容" required></textarea>
                     <button type="submit">スレッド作成</button>
                 </form>
@@ -236,7 +241,7 @@ if ($pinned_thread) {
             <?php endif; ?>
         </p>
         <p>© 2025 <a href="https://github.com/koba_9813">Koba_9813</a> All rights reserved.</p>
-        <p>Manaita BBS System Ver1.1.0</p>
+        <p>Manaita BBS System</p>
     </footer>
 </div>
 </body>
