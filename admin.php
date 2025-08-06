@@ -122,6 +122,8 @@ if (file_exists($config_file)) {
 if (isset($_POST['password'])) {
     if (password_verify($_POST['password'], ADMIN_PASSWORD_HASH)) {
         $_SESSION['admin_logged_in'] = true;
+        
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     } else {
         $login_error = 'パスワードが違います。';
     }
@@ -142,7 +144,11 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     echo '</body></html>';
     exit;
 }
-if (isset($_POST['update_board_info'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die('CSRF token validation failed.');
+    }
+}
     $board_config['board_name'] = htmlspecialchars($_POST['board_name']);
     $board_config['admin_name'] = htmlspecialchars($_POST['admin_name']);
     $board_config['admin_contact_link'] = $_POST['admin_contact_link'];
@@ -350,6 +356,7 @@ foreach ($files as $file) {
         <div class="admin-section" style="flex: 1;">
             <h2>NGワード管理</h2>
             <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                 <input type="text" name="ng_word" placeholder="NGワードを追加">
                 <button type="submit" name="add_ng_word">追加</button>
             </form>
@@ -365,6 +372,7 @@ foreach ($files as $file) {
         <div class="admin-section" style="flex: 1;">
             <h2>BANユーザー管理</h2>
             <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                 <input type="text" name="ban_id" placeholder="BANするIDを追加">
                 <button type="submit" name="add_ban_id">手動BAN</button>
             </form>
@@ -435,6 +443,7 @@ foreach ($files as $file) {
             <p style="color: green;">掲示板情報が更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="board_name">掲示板の名前:</label><br>
                 <input type="text" id="board_name" name="board_name" value="<?php echo htmlspecialchars($board_config['board_name']); ?>" style="width: 100%; padding: 8px;">
@@ -456,6 +465,7 @@ foreach ($files as $file) {
             <p style="color: green;">公開設定が更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="is_public">掲示板の公開状態:</label><br>
                 <select id="is_public" name="is_public" style="width: 100%; padding: 8px;">
@@ -477,6 +487,7 @@ foreach ($files as $file) {
             <p style="color: green;">管理者パスワードが更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="new_admin_password">新しい管理者パスワード:</label><br>
                 <input type="password" id="new_admin_password" name="new_admin_password" placeholder="新しいパスワードを入力" required style="width: 100%; padding: 8px;">
@@ -490,6 +501,7 @@ foreach ($files as $file) {
             <p style="color: green;">ピン留めスレッドが更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="pinned_thread_id">ピン留めするスレッドを選択:</label><br>
                 <select id="pinned_thread_id" name="pinned_thread_id" style="width: 100%; padding: 8px;">
@@ -512,6 +524,7 @@ foreach ($files as $file) {
             <p style="color: green;">PWA設定が更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="pwa_name">アプリ名:</label><br>
                 <input type="text" id="pwa_name" name="pwa_name" value="<?php echo htmlspecialchars($pwa_config['name']); ?>" style="width: 100%; padding: 8px;">
@@ -555,6 +568,7 @@ foreach ($files as $file) {
             <p style="color: green;">Googleアナリティクス設定が更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="google_analytics_id">Googleアナリティクス測定ID (例: G-XXXXXXXXXX または UA-XXXXXXXXX-Y):</label><br>
                 <input type="text" id="google_analytics_id" name="google_analytics_id" value="<?php echo htmlspecialchars($board_config['google_analytics_id'] ?? ''); ?>" style="width: 100%; padding: 8px;">
@@ -569,6 +583,7 @@ foreach ($files as $file) {
             <p style="color: green;">広告設定が更新されました。</p>
         <?php endif; ?>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="footer_ad_code">フッター広告コード:</label><br>
                 <textarea id="footer_ad_code" name="footer_ad_code" rows="8" style="width: 100%; padding: 8px;"><?php echo htmlspecialchars($board_config['footer_ad_code'] ?? ''); ?></textarea>
@@ -586,6 +601,7 @@ foreach ($files as $file) {
     <div class="admin-section">
         <h2>カスタムHTML/CSS編集 (スレッド一覧ページ)</h2>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="custom_index_html">カスタムHTML:</label><br>
                 <textarea id="custom_index_html" name="custom_index_html" rows="10" style="width: 100%; padding: 8px;"><?php echo htmlspecialchars($board_config['custom_index_html']); ?></textarea>
@@ -600,6 +616,7 @@ foreach ($files as $file) {
     <div class="admin-section">
         <h2>カスタムHTML/CSS編集 (スレッド表示ページ)</h2>
         <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <p>
                 <label for="custom_thread_html">カスタムHTML:</label><br>
                 <textarea id="custom_thread_html" name="custom_thread_html" rows="10" style="width: 100%; padding: 8px;"><?php echo htmlspecialchars($board_config['custom_thread_html']); ?></textarea>
