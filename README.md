@@ -67,5 +67,3 @@
 ## 貢献
 
 バグ報告や機能改善の提案など、貢献を歓迎します。GitHubのIssueやPull Requestをご利用ください。
-# bbs
-# bbs
